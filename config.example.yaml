@@ -1,0 +1,70 @@
+# Copia este fichero como config.yaml y ajústalo a vuestro negocio.
+# config.yaml NO debe subirse a GitHub con contraseñas reales dentro:
+# usad variables de entorno / GitHub Secrets (ver README.md).
+
+feed_url: "https://contrataciondelestado.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto3.atom"
+
+# Si el título o la descripción de la licitación contiene CUALQUIERA de estas
+# frases, se considera una coincidencia (salvo que también matchee una exclusión).
+incluir_palabras_clave:
+  - "bolsa del corredor"
+  - "bolsas del corredor"
+  - "carrera popular"
+  - "carreras populares"
+  - "prueba deportiva"
+  - "pruebas deportivas"
+  - "dorsales"
+  - "cronometraje"
+  - "avituallamiento"
+  - "trofeos deportivos"
+  - "medallas finisher"
+  - "material deportivo"
+  - "equipamiento deportivo"
+  - "organización de eventos deportivos"
+  - "organización de la prueba"
+  - "maratón"
+  - "media maratón"
+  - "trail running"
+  - "carrera solidaria"
+  - "carrera nocturna"
+
+# Si el título o la descripción contiene cualquiera de estas frases,
+# se descarta SIEMPRE, aunque también matchee una palabra clave de arriba.
+excluir_palabras_clave:
+  - "mantenimiento de instalaciones deportivas"
+  - "limpieza de piscina"
+  - "monitor de gimnasio"
+  - "socorrista"
+  - "césped artificial"
+  - "climatización pabellón"
+  - "vigilancia y socorrismo"
+  - "espectáculo taurino"
+  - "espectaculos taurinos"
+  - "corrida de toros"
+  - "suelta de vaquillas"
+  - "rejoneo"
+  - "encierro"
+
+# CPV de referencia. OJO: en pruebas reales, los CPV "paraguas" de deporte/cultura
+# (ej. 92000000) devuelven MUCHO ruido (toros, patrocinios, ferias...) porque son
+# categorías muy amplias — el mismo problema que las alertas oficiales de PLACSP.
+# Por eso vienen desactivados por defecto (lista vacía) y el filtrado se basa solo
+# en incluir_palabras_clave, que en la práctica da resultados mucho más limpios.
+# Actívalos solo si os interesa ampliar la red y estáis dispuestos a filtrar ruido
+# a mano; los más específicos son los que menos falsos positivos dan:
+#   37400000 Artículos y equipo deportivo
+#   92620000 Servicios relacionados con el deporte
+#   79952000 Servicios de eventos
+#   92000000 Servicios de esparcimiento, culturales y deportivos (MUY amplio, no recomendado)
+cpv_codigos: []
+
+email:
+  usuario: "tuempresa@gmail.com"
+  password: ""            # mejor dejarlo vacío aquí y usar EMAIL_PASSWORD (ver README)
+  destinatario: "tuempresa@gmail.com"
+  smtp_servidor: "smtp.gmail.com"
+  smtp_puerto: 587
+
+telegram:
+  bot_token: ""            # mejor usar TELEGRAM_BOT_TOKEN (ver README)
+  chat_id: ""               # mejor usar TELEGRAM_CHAT_ID (ver README)

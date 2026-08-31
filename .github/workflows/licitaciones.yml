@@ -1,0 +1,45 @@
+name: Monitor licitaciones deportivas
+
+on:
+  schedule:
+    # Todos los lunes a las 07:00 UTC (08:00/09:00 hora española según horario de verano)
+    - cron: "0 7 * * 1"
+  workflow_dispatch: {}   # permite lanzarlo a mano desde la pestaña Actions
+
+permissions:
+  contents: write   # necesario para poder commitear data/vistos.json
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Preparar config.yaml
+        run: cp config.example.yaml config.yaml
+
+      - name: Ejecutar monitor
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python monitor_licitaciones.py --config config.yaml
+
+      - name: Guardar estado y publicar el panel
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/vistos.json data/historial.json docs/index.html
+          git diff --cached --quiet || git commit -m "Actualiza panel de licitaciones [skip ci]"
+          git push
