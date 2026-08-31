@@ -2,10 +2,10 @@
 # config.yaml NO debe subirse a GitHub con contraseñas reales dentro:
 # usad variables de entorno / GitHub Secrets (ver README.md).
 
-feed_url: "https://contrataciondelestado.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto3.atom"
-
-# Si el título o la descripción de la licitación contiene CUALQUIERA de estas
-# frases, se considera una coincidencia (salvo que también matchee una exclusión).
+# Cada una de estas frases se busca tal cual (búsqueda exacta) en el buscador
+# documental de PLACSP, que indexa el texto completo de anuncios y pliegos —
+# no solo el título — así que encuentra muchas más licitaciones reales que
+# filtrar por CPV o por el feed de "novedades".
 incluir_palabras_clave:
   - "bolsa del corredor"
   - "bolsas del corredor"
@@ -20,8 +20,10 @@ incluir_palabras_clave:
   - "medallas finisher"
   - "material deportivo"
   - "equipamiento deportivo"
+  - "eventos deportivos"
   - "organización de eventos deportivos"
   - "organización de la prueba"
+  - "prueba atlética"
   - "maratón"
   - "media maratón"
   - "trail running"
@@ -44,19 +46,6 @@ excluir_palabras_clave:
   - "suelta de vaquillas"
   - "rejoneo"
   - "encierro"
-
-# CPV de referencia. OJO: en pruebas reales, los CPV "paraguas" de deporte/cultura
-# (ej. 92000000) devuelven MUCHO ruido (toros, patrocinios, ferias...) porque son
-# categorías muy amplias — el mismo problema que las alertas oficiales de PLACSP.
-# Por eso vienen desactivados por defecto (lista vacía) y el filtrado se basa solo
-# en incluir_palabras_clave, que en la práctica da resultados mucho más limpios.
-# Actívalos solo si os interesa ampliar la red y estáis dispuestos a filtrar ruido
-# a mano; los más específicos son los que menos falsos positivos dan:
-#   37400000 Artículos y equipo deportivo
-#   92620000 Servicios relacionados con el deporte
-#   79952000 Servicios de eventos
-#   92000000 Servicios de esparcimiento, culturales y deportivos (MUY amplio, no recomendado)
-cpv_codigos: []
 
 email:
   usuario: "tuempresa@gmail.com"

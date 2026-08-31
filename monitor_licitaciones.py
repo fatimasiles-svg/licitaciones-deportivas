@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Monitor de licitaciones deportivas (bolsas del corredor, carreras, eventos deportivos)
-sobre el feed ATOM abierto de la Plataforma de Contratación del Sector Público (PLACSP).
+sobre el buscador documental de la Plataforma de Contratación del Sector Público (PLACSP).
 
 Uso:
     python monitor_licitaciones.py --config config.yaml
@@ -14,22 +14,15 @@ import os
 import re
 import smtplib
 import sys
-import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from pathlib import Path
 
 import requests
 import yaml
+from playwright.sync_api import sync_playwright
 
-FEED_URL = "https://contrataciondelestado.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto3.atom"
-
-ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
-# El feed de PLACSP incrusta CPVs y otros metadatos vía extensiones CODICE.
-CODICE_NS = {
-    "cac-place-ext": "urn:dgpe:names:draft:codice:schema:xsd:CommonAggregateComponents-2",
-    "cbc-place-ext": "urn:dgpe:names:draft:codice:schema:xsd:CommonBasicComponents-2",
-}
+BUSCADOR_URL = "https://contrataciondelestado.es/wps/portal/plataforma/buscador/"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,6 +30,31 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 log = logging.getLogger("monitor_licitaciones")
+
+EXTRAER_RESULTADOS_JS = """
+() => {
+  const links = Array.from(document.querySelectorAll('a')).filter(a => a.href.includes('idEvl'));
+  const seen = new Set();
+  const out = [];
+  for (const a of links) {
+    const bloque = a.closest('tr,li,div')?.innerText || '';
+    const primeraLinea = bloque.split('\\n')[0] || '';
+    const tipoMatch = primeraLinea.match(/\\(([^)]+)\\)/);
+    const descMatch = bloque.match(/Descripión:\\s*([^\\n]+)/);
+    const fechaMatch = bloque.match(/Detalle de la licitación\\s*([\\d\\/]+)/);
+    if (!seen.has(a.href) && descMatch) {
+      seen.add(a.href);
+      out.push({
+        href: a.href,
+        tipo: tipoMatch ? tipoMatch[1] : '',
+        desc: descMatch[1].trim(),
+        fecha: fechaMatch ? fechaMatch[1] : '',
+      });
+    }
+  }
+  return out;
+}
+"""
 
 
 def cargar_config(ruta: str) -> dict:
@@ -55,65 +73,70 @@ def cargar_config(ruta: str) -> dict:
     return cfg
 
 
-def descargar_feed(url: str, timeout: int = 30) -> bytes:
-    headers = {"User-Agent": "monitor-licitaciones-deportivas/1.0"}
-    resp = requests.get(url, headers=headers, timeout=timeout)
-    resp.raise_for_status()
-    return resp.content
+def idevl_de(href: str) -> str:
+    m = re.search(r"idEvl=([^&]+)", href)
+    return m.group(1) if m else href
 
 
-def extraer_cpvs(entry: ET.Element) -> list[str]:
-    """Extrae códigos CPV de la extensión CODICE si están presentes en la entry."""
-    cpvs = []
-    for el in entry.iter():
-        tag = el.tag.split("}")[-1]
-        if tag in ("ItemClassificationCode",) and el.text:
-            texto = el.text.strip()
-            if texto.isdigit():
-                cpvs.append(texto)
-    return sorted(set(cpvs))
+def fecha_a_iso(fecha_ddmmyyyy: str) -> str:
+    try:
+        return datetime.strptime(fecha_ddmmyyyy, "%d/%m/%Y").replace(tzinfo=timezone.utc).isoformat()
+    except ValueError:
+        return ""
 
 
-def parsear_entries(contenido_atom: bytes) -> list[dict]:
-    root = ET.fromstring(contenido_atom)
-    licitaciones = []
-    for entry in root.findall("atom:entry", ATOM_NS):
-        entry_id = entry.findtext("atom:id", default="", namespaces=ATOM_NS)
-        titulo = (entry.findtext("atom:title", default="", namespaces=ATOM_NS) or "").strip()
-        resumen = (entry.findtext("atom:summary", default="", namespaces=ATOM_NS) or "").strip()
-        actualizado = entry.findtext("atom:updated", default="", namespaces=ATOM_NS)
-        link_el = entry.find("atom:link", ATOM_NS)
-        link = link_el.get("href") if link_el is not None else ""
+def buscar_frase(page, frase: str) -> list[dict]:
+    page.goto(BUSCADOR_URL, timeout=30000)
+    page.get_by_label("Texto a buscar:").fill(f'"{frase}"')
+    page.get_by_role("button", name="Buscar").click()
+    page.wait_for_selector("text=Resultados para la consulta", timeout=20000)
+    page.wait_for_timeout(1000)
+    return page.evaluate(EXTRAER_RESULTADOS_JS)
 
-        licitaciones.append(
-            {
-                "id": entry_id,
-                "titulo": titulo,
-                "resumen": resumen,
-                "actualizado": actualizado,
-                "link": link,
-                "cpv": extraer_cpvs(entry),
-            }
-        )
-    return licitaciones
+
+def buscar_licitaciones(frases: list[str]) -> list[dict]:
+    """Busca cada frase en el buscador documental de PLACSP y devuelve licitaciones únicas."""
+    encontradas = {}
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        for frase in frases:
+            try:
+                resultados = buscar_frase(page, frase)
+            except Exception as exc:
+                log.warning("Fallo buscando %r: %s", frase, exc)
+                continue
+            log.info("  %r -> %d documentos", frase, len(resultados))
+            for r in resultados:
+                if r["tipo"] == "Anuncio de adjudicación":
+                    continue  # ya adjudicada, no es una oportunidad para presentarse
+                # PLACSP no respeta bien las comillas de frase exacta y a veces devuelve
+                # coincidencias del cuerpo del documento que no guardan relación real con
+                # la búsqueda. Como filtro de cordura, exigimos que el resumen contenga
+                # alguna de las frases configuradas (no necesariamente la usada en esta
+                # búsqueda concreta, para no perder coincidencias cruzadas legítimas).
+                desc_lower = r["desc"].lower()
+                if not any(f.lower() in desc_lower for f in frases):
+                    continue
+                idevl = idevl_de(r["href"])
+                if idevl in encontradas:
+                    continue
+                encontradas[idevl] = {
+                    "id": f"doc:{idevl}",
+                    "titulo": r["desc"],
+                    "resumen": "",
+                    "link": r["href"],
+                    "actualizado": fecha_a_iso(r["fecha"]),
+                }
+            page.wait_for_timeout(800)  # no saturar el servidor
+        browser.close()
+    return list(encontradas.values())
 
 
 def coincide(licitacion: dict, cfg: dict) -> bool:
     texto = f"{licitacion['titulo']} {licitacion['resumen']}".lower()
-
     excluir = [p.lower() for p in cfg.get("excluir_palabras_clave", [])]
-    if any(patron in texto for patron in excluir):
-        return False
-
-    incluir = [p.lower() for p in cfg.get("incluir_palabras_clave", [])]
-    if any(patron in texto for patron in incluir):
-        return True
-
-    cpv_objetivo = set(cfg.get("cpv_codigos", []))
-    if cpv_objetivo and any(cpv.startswith(tuple(cpv_objetivo)) for cpv in licitacion["cpv"]):
-        return True
-
-    return False
+    return not any(patron in texto for patron in excluir)
 
 
 def cargar_vistos(ruta: Path) -> dict:
@@ -178,7 +201,7 @@ def formatear_fecha(iso_texto: str) -> str:
     return fecha.strftime("%d/%m/%Y %H:%M UTC")
 
 
-def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: str, feed_ok: bool) -> None:
+def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: str, busqueda_ok: bool) -> None:
     filas = sorted(historial, key=lambda x: x.get("encontrado_en", ""), reverse=True)
 
     def escapar(texto: str) -> str:
@@ -194,7 +217,7 @@ def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: 
             f"""
         <article class="tarjeta">
           <h2><a href="{escapar(f['link'])}" target="_blank" rel="noopener">{escapar(f['titulo'])}</a></h2>
-          <p class="meta">Publicada: {escapar(f.get('actualizado', 'n/d')[:10])} · Detectada: {escapar(f.get('encontrado_en', '')[:10])}{' · CPV: ' + escapar(', '.join(f['cpv'])) if f.get('cpv') else ''}</p>
+          <p class="meta">Publicada: {escapar(f.get('actualizado', '')[:10] or 'n/d')} · Detectada: {escapar(f.get('encontrado_en', '')[:10])}</p>
         </article>"""
             for f in filas
         )
@@ -202,9 +225,9 @@ def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: 
         tarjetas = '<p class="vacio">Todavía no se ha encontrado ninguna licitación que coincida. Esta página se actualiza automáticamente cada semana.</p>'
 
     estado = (
-        '<span class="ok">● Feed consultado correctamente</span>'
-        if feed_ok
-        else '<span class="error">● Hubo un problema al consultar el feed en la última ejecución</span>'
+        '<span class="ok">● Búsqueda realizada correctamente</span>'
+        if busqueda_ok
+        else '<span class="error">● Hubo un problema al consultar PLACSP en la última ejecución</span>'
     )
 
     html = f"""<!doctype html>
@@ -232,7 +255,7 @@ def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: 
 </head>
 <body>
   <h1>Licitaciones deportivas — bolsas del corredor, carreras y eventos</h1>
-  <p class="subtitulo">Vigilancia automática del feed de la Plataforma de Contratación del Sector Público (PLACSP)</p>
+  <p class="subtitulo">Vigilancia automática del buscador documental de la Plataforma de Contratación del Sector Público (PLACSP)</p>
   <p class="estado">{estado} · Última comprobación: {escapar(formatear_fecha(ultima_comprobacion))}</p>
   {tarjetas}
   <footer>Se actualiza automáticamente cada lunes mediante GitHub Actions. {len(filas)} licitación(es) en el histórico (últimos 180 días).</footer>
@@ -251,7 +274,7 @@ def enviar_email(cfg_email: dict, nuevas: list[dict]) -> None:
         return
 
     cuerpo = "\n\n".join(
-        f"{l['titulo']}\n{l['link']}\nActualizado: {l['actualizado']}"
+        f"{l['titulo']}\n{l['link']}\nPublicada: {l['actualizado'][:10] if l['actualizado'] else 'n/d'}"
         for l in nuevas
     )
     asunto = f"[Licitaciones deportivas] {len(nuevas)} nueva(s) coincidencia(s)"
@@ -278,7 +301,7 @@ def enviar_telegram(cfg_telegram: dict, nuevas: list[dict]) -> None:
         return
 
     for l in nuevas:
-        texto = f"📋 *{l['titulo']}*\n{l['link']}\nActualizado: {l['actualizado']}"
+        texto = f"📋 *{l['titulo']}*\n{l['link']}"
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         try:
             resp = requests.post(
@@ -317,26 +340,24 @@ def main() -> int:
     historial = cargar_historial(ruta_historial)
     ahora = datetime.now(timezone.utc).isoformat()
 
-    log.info("Descargando feed de PLACSP...")
+    frases = cfg.get("incluir_palabras_clave", [])
+    log.info("Consultando el buscador documental de PLACSP con %d frases...", len(frases))
     try:
-        contenido = descargar_feed(cfg.get("feed_url", FEED_URL))
-    except requests.RequestException as exc:
-        log.error("No se pudo descargar el feed: %s", exc)
+        licitaciones = buscar_licitaciones(frases)
+    except Exception as exc:
+        log.error("No se pudo consultar PLACSP: %s", exc)
         if not args.dry_run:
-            generar_html(historial, Path(args.panel), ahora, feed_ok=False)
+            generar_html(historial, Path(args.panel), ahora, busqueda_ok=False)
         return 1
 
-    licitaciones = parsear_entries(contenido)
-    log.info("Entradas en el feed: %d", len(licitaciones))
+    log.info("Licitaciones únicas encontradas: %d", len(licitaciones))
 
     coincidencias = [l for l in licitaciones if coincide(l, cfg)]
-    log.info("Coincidencias por palabra clave/CPV: %d", len(coincidencias))
-
     nuevas = [l for l in coincidencias if l["id"] not in vistos]
     log.info("Nuevas (no notificadas antes): %d", len(nuevas))
 
     for l in nuevas:
-        print(f"- {l['titulo']}\n  {l['link']}\n  CPV: {', '.join(l['cpv']) or 'n/d'}\n")
+        print(f"- {l['titulo']}\n  {l['link']}\n")
 
     if args.dry_run:
         log.info("Modo --dry-run: no se han enviado alertas ni guardado estado")
@@ -354,7 +375,7 @@ def main() -> int:
     else:
         log.info("Nada nuevo que avisar.")
 
-    generar_html(historial, Path(args.panel), ahora, feed_ok=True)
+    generar_html(historial, Path(args.panel), ahora, busqueda_ok=True)
     return 0
 
 
