@@ -10,6 +10,13 @@
   h1 { font-size: 1.4rem; margin-bottom: 4px; }
   .subtitulo { color: #666; font-size: 0.9rem; margin-top: 0; }
   .estado { font-size: 0.85rem; margin: 12px 0 28px; }
+  .ok { color: #1a7f37; }
+  .error { color: #c0392b; }
+  .tarjeta { border: 1px solid rgba(127,127,127,0.3); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .tarjeta h2 { font-size: 1.05rem; margin: 0 0 6px; }
+  .tarjeta a { text-decoration: none; }
+  .tarjeta a:hover { text-decoration: underline; }
+  .meta { font-size: 0.82rem; color: #777; margin: 0; }
   .vacio { color: #777; font-style: italic; }
   footer { margin-top: 40px; font-size: 0.78rem; color: #999; }
 </style>
@@ -17,8 +24,8 @@
 <body>
   <h1>Licitaciones deportivas — bolsas del corredor, carreras y eventos</h1>
   <p class="subtitulo">Vigilancia automática del feed de la Plataforma de Contratación del Sector Público (PLACSP)</p>
-  <p class="estado">Esta página se generará automáticamente en la primera ejecución del workflow de GitHub Actions.</p>
-  <p class="vacio">Todavía no se ha ejecutado ninguna comprobación.</p>
-  <footer>Se actualizará automáticamente cada lunes mediante GitHub Actions.</footer>
+  <p class="estado"><span class="ok">● Feed consultado correctamente</span> · Última comprobación: 31/08/2026 10:07 UTC</p>
+  <p class="vacio">Todavía no se ha encontrado ninguna licitación que coincida. Esta página se actualiza automáticamente cada semana.</p>
+  <footer>Se actualiza automáticamente cada lunes mediante GitHub Actions. 0 licitación(es) en el histórico (últimos 180 días).</footer>
 </body>
 </html>
