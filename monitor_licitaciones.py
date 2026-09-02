@@ -23,6 +23,7 @@ import yaml
 from playwright.sync_api import sync_playwright
 
 BUSCADOR_URL = "https://contrataciondelestado.es/wps/portal/plataforma/buscador/"
+PAGINAS_POR_BUSQUEDA = 4  # 25 resultados por página -> hasta 100 documentos por frase
 
 logging.basicConfig(
     level=logging.INFO,
@@ -78,28 +79,52 @@ def idevl_de(href: str) -> str:
     return m.group(1) if m else href
 
 
-def fecha_a_iso(fecha_ddmmyyyy: str) -> str:
-    try:
-        return datetime.strptime(fecha_ddmmyyyy, "%d/%m/%Y").replace(tzinfo=timezone.utc).isoformat()
-    except ValueError:
-        return ""
-
-
-def buscar_frase(page, frase: str) -> list[dict]:
+def buscar_frase(page, frase: str, max_paginas: int = PAGINAS_POR_BUSQUEDA) -> list[dict]:
     page.goto(BUSCADOR_URL, timeout=30000)
     page.get_by_label("Texto a buscar:").fill(f'"{frase}"')
     page.get_by_role("button", name="Buscar").click()
     page.wait_for_selector("text=Resultados para la consulta", timeout=20000)
     page.wait_for_timeout(1000)
-    return page.evaluate(EXTRAER_RESULTADOS_JS)
+
+    resultados = list(page.evaluate(EXTRAER_RESULTADOS_JS))
+    for _ in range(max_paginas - 1):
+        siguiente = page.locator('input[src*="NextButton"]')
+        if siguiente.count() == 0:
+            break  # no hay más páginas
+        siguiente.first.click()
+        page.wait_for_timeout(1200)
+        resultados.extend(page.evaluate(EXTRAER_RESULTADOS_JS))
+    return resultados
+
+
+def extraer_ficha(page, url: str) -> dict:
+    """Visita la ficha real de la licitación para sacar título completo, estado y fecha límite."""
+    page.goto(url, timeout=30000)
+    page.wait_for_selector("text=Objeto del contrato", timeout=20000)
+    texto = page.inner_text("body")
+
+    def buscar(patron: str) -> str:
+        m = re.search(patron, texto)
+        return m.group(1).strip() if m else ""
+
+    return {
+        "expediente": buscar(r"Expediente\n([^\n]+)"),
+        "titulo": buscar(r"Objeto del contrato\n([\s\S]+?)\n\s*Enlace a la licitación"),
+        "organo": buscar(r"Órgano de contratación\n([^\n]+)"),
+        "estado": buscar(r"Estado de la Licitación\n([^\n]+)"),
+        "cpv": buscar(r"Código CPV\n([^\n]+)"),
+        "plazo": buscar(r"Fecha fin de presentación de oferta\n([^\n]+)"),
+    }
 
 
 def buscar_licitaciones(frases: list[str]) -> list[dict]:
-    """Busca cada frase en el buscador documental de PLACSP y devuelve licitaciones únicas."""
-    encontradas = {}
+    """Busca cada frase en el buscador documental de PLACSP, y para cada candidata
+    única visita su ficha real para confirmar título completo, estado y plazo."""
+    candidatas = {}
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page = browser.new_page()
+        page = browser.new_page(locale="es-ES", extra_http_headers={"Accept-Language": "es-ES,es;q=0.9"})
+
         for frase in frases:
             try:
                 resultados = buscar_frase(page, frase)
@@ -110,25 +135,33 @@ def buscar_licitaciones(frases: list[str]) -> list[dict]:
             for r in resultados:
                 if r["tipo"] == "Anuncio de adjudicación":
                     continue  # ya adjudicada, no es una oportunidad para presentarse
-                # PLACSP no respeta bien las comillas de frase exacta y a veces devuelve
-                # coincidencias del cuerpo del documento que no guardan relación real con
-                # la búsqueda. Como filtro de cordura, exigimos que el resumen contenga
-                # alguna de las frases configuradas (no necesariamente la usada en esta
-                # búsqueda concreta, para no perder coincidencias cruzadas legítimas).
-                desc_lower = r["desc"].lower()
-                if not any(f.lower() in desc_lower for f in frases):
-                    continue
                 idevl = idevl_de(r["href"])
-                if idevl in encontradas:
-                    continue
-                encontradas[idevl] = {
-                    "id": f"doc:{idevl}",
-                    "titulo": r["desc"],
-                    "resumen": "",
-                    "link": r["href"],
-                    "actualizado": fecha_a_iso(r["fecha"]),
-                }
-            page.wait_for_timeout(800)  # no saturar el servidor
+                candidatas.setdefault(idevl, r["href"])
+            page.wait_for_timeout(500)  # no saturar el servidor
+
+        log.info("Candidatas únicas a comprobar en su ficha real: %d", len(candidatas))
+        encontradas = {}
+        for i, (idevl, href) in enumerate(candidatas.items(), start=1):
+            if i % 10 == 0 or i == len(candidatas):
+                log.info("  ficha %d/%d...", i, len(candidatas))
+            try:
+                ficha = extraer_ficha(page, href)
+            except Exception as exc:
+                log.warning("Fallo consultando ficha %s: %s", href, exc)
+                continue
+            if ficha["estado"] != "Publicada":
+                continue  # ya cerrada, adjudicada, resuelta, etc. -> no es una oportunidad
+            if not ficha["titulo"]:
+                continue
+            encontradas[idevl] = {
+                "id": f"doc:{idevl}",
+                "titulo": f"{ficha['expediente']}. {ficha['titulo']}".strip(". "),
+                "resumen": f"{ficha['organo']} {ficha['cpv']}",
+                "link": href,
+                "organo": ficha["organo"],
+                "plazo": ficha["plazo"],
+            }
+            page.wait_for_timeout(400)
         browser.close()
     return list(encontradas.values())
 
@@ -136,7 +169,10 @@ def buscar_licitaciones(frases: list[str]) -> list[dict]:
 def coincide(licitacion: dict, cfg: dict) -> bool:
     texto = f"{licitacion['titulo']} {licitacion['resumen']}".lower()
     excluir = [p.lower() for p in cfg.get("excluir_palabras_clave", [])]
-    return not any(patron in texto for patron in excluir)
+    if any(patron in texto for patron in excluir):
+        return False
+    incluir = [p.lower() for p in cfg.get("incluir_palabras_clave", [])]
+    return any(patron in texto for patron in incluir)
 
 
 def cargar_vistos(ruta: Path) -> dict:
@@ -201,8 +237,15 @@ def formatear_fecha(iso_texto: str) -> str:
     return fecha.strftime("%d/%m/%Y %H:%M UTC")
 
 
+def clave_orden_plazo(licitacion: dict) -> datetime:
+    try:
+        return datetime.strptime(licitacion.get("plazo", ""), "%d/%m/%Y %H:%M")
+    except ValueError:
+        return datetime.max  # sin plazo reconocible -> al final
+
+
 def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: str, busqueda_ok: bool) -> None:
-    filas = sorted(historial, key=lambda x: x.get("encontrado_en", ""), reverse=True)
+    filas = sorted(historial, key=clave_orden_plazo)
 
     def escapar(texto: str) -> str:
         return (
@@ -217,7 +260,7 @@ def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: 
             f"""
         <article class="tarjeta">
           <h2><a href="{escapar(f['link'])}" target="_blank" rel="noopener">{escapar(f['titulo'])}</a></h2>
-          <p class="meta">Publicada: {escapar(f.get('actualizado', '')[:10] or 'n/d')} · Detectada: {escapar(f.get('encontrado_en', '')[:10])}</p>
+          <p class="meta">Plazo: {escapar(f.get('plazo') or 'n/d')} · Órgano: {escapar(f.get('organo') or 'n/d')} · Detectada: {escapar(f.get('encontrado_en', '')[:10])}</p>
         </article>"""
             for f in filas
         )
@@ -274,7 +317,7 @@ def enviar_email(cfg_email: dict, nuevas: list[dict]) -> None:
         return
 
     cuerpo = "\n\n".join(
-        f"{l['titulo']}\n{l['link']}\nPublicada: {l['actualizado'][:10] if l['actualizado'] else 'n/d'}"
+        f"{l['titulo']}\n{l['link']}\nPlazo: {l.get('plazo') or 'n/d'}"
         for l in nuevas
     )
     asunto = f"[Licitaciones deportivas] {len(nuevas)} nueva(s) coincidencia(s)"
@@ -357,7 +400,7 @@ def main() -> int:
     log.info("Nuevas (no notificadas antes): %d", len(nuevas))
 
     for l in nuevas:
-        print(f"- {l['titulo']}\n  {l['link']}\n")
+        print(f"- {l['titulo']}\n  Plazo: {l.get('plazo') or 'n/d'}\n  {l['link']}\n")
 
     if args.dry_run:
         log.info("Modo --dry-run: no se han enviado alertas ni guardado estado")
