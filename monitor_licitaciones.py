@@ -426,8 +426,14 @@ def main() -> int:
         return 0
 
     if nuevas:
-        enviar_email(cfg.get("email", {}), nuevas)
-        enviar_telegram(cfg.get("telegram", {}), nuevas)
+        try:
+            enviar_email(cfg.get("email", {}), nuevas)
+        except Exception as exc:
+            log.error("Fallo enviando el email: %s", exc)
+        try:
+            enviar_telegram(cfg.get("telegram", {}), nuevas)
+        except Exception as exc:
+            log.error("Fallo enviando Telegram: %s", exc)
 
         for l in nuevas:
             vistos[l["id"]] = ahora
