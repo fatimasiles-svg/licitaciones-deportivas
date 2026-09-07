@@ -7,6 +7,8 @@ Uso:
     python monitor_licitaciones.py --config config.yaml
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import logging
@@ -244,6 +246,23 @@ def clave_orden_plazo(licitacion: dict) -> datetime:
         return datetime.max  # sin plazo reconocible -> al final
 
 
+def dias_restantes(licitacion: dict) -> int | None:
+    """Días desde hoy hasta el plazo de presentación, o None si no hay plazo reconocible."""
+    fecha = clave_orden_plazo(licitacion)
+    if fecha == datetime.max:
+        return None
+    return (fecha.date() - datetime.now(timezone.utc).date()).days
+
+
+def etiqueta_plazo(licitacion: dict) -> str:
+    dias = dias_restantes(licitacion)
+    if dias is None:
+        return licitacion.get("plazo") or "n/d"
+    if dias < 0:
+        return f"{licitacion.get('plazo')} (plazo ya vencido)"
+    return f"{licitacion.get('plazo')} (quedan {dias} días)"
+
+
 def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: str, busqueda_ok: bool) -> None:
     filas = sorted(historial, key=clave_orden_plazo)
 
@@ -260,7 +279,7 @@ def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: 
             f"""
         <article class="tarjeta">
           <h2><a href="{escapar(f['link'])}" target="_blank" rel="noopener">{escapar(f['titulo'])}</a></h2>
-          <p class="meta">Plazo: {escapar(f.get('plazo') or 'n/d')} · Órgano: {escapar(f.get('organo') or 'n/d')} · Detectada: {escapar(f.get('encontrado_en', '')[:10])}</p>
+          <p class="meta">Plazo: {escapar(etiqueta_plazo(f))} · Órgano: {escapar(f.get('organo') or 'n/d')} · Detectada: {escapar(f.get('encontrado_en', '')[:10])}</p>
         </article>"""
             for f in filas
         )
@@ -317,7 +336,7 @@ def enviar_email(cfg_email: dict, nuevas: list[dict]) -> None:
         return
 
     cuerpo = "\n\n".join(
-        f"{l['titulo']}\n{l['link']}\nPlazo: {l.get('plazo') or 'n/d'}"
+        f"{l['titulo']}\n{l['link']}\nPlazo: {etiqueta_plazo(l)}\nÓrgano: {l.get('organo') or 'n/d'}"
         for l in nuevas
     )
     asunto = f"[Licitaciones deportivas] {len(nuevas)} nueva(s) coincidencia(s)"
@@ -344,7 +363,7 @@ def enviar_telegram(cfg_telegram: dict, nuevas: list[dict]) -> None:
         return
 
     for l in nuevas:
-        texto = f"📋 *{l['titulo']}*\n{l['link']}"
+        texto = f"📋 *{l['titulo']}*\nPlazo: {etiqueta_plazo(l)}\n{l['link']}"
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         try:
             resp = requests.post(
@@ -400,7 +419,7 @@ def main() -> int:
     log.info("Nuevas (no notificadas antes): %d", len(nuevas))
 
     for l in nuevas:
-        print(f"- {l['titulo']}\n  Plazo: {l.get('plazo') or 'n/d'}\n  {l['link']}\n")
+        print(f"- {l['titulo']}\n  Plazo: {etiqueta_plazo(l)}\n  {l['link']}\n")
 
     if args.dry_run:
         log.info("Modo --dry-run: no se han enviado alertas ni guardado estado")
