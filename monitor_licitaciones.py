@@ -362,24 +362,23 @@ def enviar_telegram(cfg_telegram: dict, nuevas: list[dict]) -> None:
         log.info("Telegram no configurado, se omite el envío")
         return
 
+    enviadas = 0
     for l in nuevas:
-        texto = f"📋 *{l['titulo']}*\nPlazo: {etiqueta_plazo(l)}\n{l['link']}"
+        # Texto plano, sin parse_mode: los títulos de licitaciones traen paréntesis,
+        # puntos y guiones que rompen el parseo de Markdown de Telegram.
+        texto = f"📋 {l['titulo']}\nPlazo: {etiqueta_plazo(l)}\n{l['link']}"
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         try:
             resp = requests.post(
                 url,
-                json={
-                    "chat_id": chat_id,
-                    "text": texto,
-                    "parse_mode": "Markdown",
-                    "disable_web_page_preview": False,
-                },
+                json={"chat_id": chat_id, "text": texto, "disable_web_page_preview": False},
                 timeout=15,
             )
             resp.raise_for_status()
+            enviadas += 1
         except requests.RequestException as exc:
             log.error("Fallo enviando a Telegram: %s", exc)
-    log.info("Notificaciones de Telegram enviadas (%d)", len(nuevas))
+    log.info("Notificaciones de Telegram enviadas (%d/%d)", enviadas, len(nuevas))
 
 
 def main() -> int:
