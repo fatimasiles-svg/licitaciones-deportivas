@@ -10,6 +10,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import logging
 import os
@@ -45,13 +46,17 @@ EXTRAER_RESULTADOS_JS = """
     const tipoMatch = primeraLinea.match(/\\(([^)]+)\\)/);
     const descMatch = bloque.match(/Descripión:\\s*([^\\n]+)/);
     const fechaMatch = bloque.match(/Detalle de la licitación\\s*([\\d\\/]+)/);
-    if (!seen.has(a.href) && descMatch) {
-      seen.add(a.href);
+    const docLink = a.closest('tr,li,div')?.querySelector('a[id*="textColumnaTituloResultado"]');
+    const clave = a.href + '|' + (docLink ? docLink.href : '');
+    if (!seen.has(clave) && descMatch) {
+      seen.add(clave);
       out.push({
         href: a.href,
         tipo: tipoMatch ? tipoMatch[1] : '',
         desc: descMatch[1].trim(),
         fecha: fechaMatch ? fechaMatch[1] : '',
+        doc_href: docLink ? docLink.href : '',
+        doc_nombre: docLink ? docLink.textContent.trim() : '',
       });
     }
   }
@@ -114,6 +119,7 @@ def extraer_ficha(page, url: str) -> dict:
         "titulo": buscar(r"Objeto del contrato\n([\s\S]+?)\n\s*Enlace a la licitación"),
         "organo": buscar(r"Órgano de contratación\n([^\n]+)"),
         "estado": buscar(r"Estado de la Licitación\n([^\n]+)"),
+        "tipo": buscar(r"Tipo de Contrato\n([^\n]+)"),
         "cpv": buscar(r"Código CPV\n([^\n]+)"),
         "plazo": buscar(r"Fecha fin de presentación de oferta\n([^\n]+)"),
     }
@@ -138,14 +144,18 @@ def buscar_licitaciones(frases: list[str]) -> list[dict]:
                 if r["tipo"] == "Anuncio de adjudicación":
                     continue  # ya adjudicada, no es una oportunidad para presentarse
                 idevl = idevl_de(r["href"])
-                candidatas.setdefault(idevl, r["href"])
+                cand = candidatas.setdefault(idevl, {"href": r["href"], "docs": {}})
+                nombre = r.get("doc_nombre", "")
+                if r.get("doc_href") and r["tipo"] in ("Pliegos", "Anuncio de Licitación") and nombre.lower().endswith(".pdf"):
+                    cand["docs"][r["doc_href"]] = nombre
             page.wait_for_timeout(500)  # no saturar el servidor
 
         log.info("Candidatas únicas a comprobar en su ficha real: %d", len(candidatas))
         encontradas = {}
-        for i, (idevl, href) in enumerate(candidatas.items(), start=1):
+        for i, (idevl, cand) in enumerate(candidatas.items(), start=1):
             if i % 10 == 0 or i == len(candidatas):
                 log.info("  ficha %d/%d...", i, len(candidatas))
+            href = cand["href"]
             try:
                 ficha = extraer_ficha(page, href)
             except Exception as exc:
@@ -158,10 +168,12 @@ def buscar_licitaciones(frases: list[str]) -> list[dict]:
             encontradas[idevl] = {
                 "id": f"doc:{idevl}",
                 "titulo": f"{ficha['expediente']}. {ficha['titulo']}".strip(". "),
-                "resumen": f"{ficha['organo']} {ficha['cpv']}",
+                "resumen": ficha["cpv"],
                 "link": href,
                 "organo": ficha["organo"],
                 "plazo": ficha["plazo"],
+                "tipo": ficha["tipo"],
+                "docs": list(cand["docs"].items()),
             }
             page.wait_for_timeout(400)
         browser.close()
@@ -169,12 +181,97 @@ def buscar_licitaciones(frases: list[str]) -> list[dict]:
 
 
 def coincide(licitacion: dict, cfg: dict) -> bool:
-    texto = f"{licitacion['titulo']} {licitacion['resumen']}".lower()
-    excluir = [p.lower() for p in cfg.get("excluir_palabras_clave", [])]
-    if any(patron in texto for patron in excluir):
+    """Producción/suministro de material para carreras: tipo de contrato permitido,
+    algún término de carrera/material en el título o CPV, y ninguna exclusión."""
+    tipos = [t.lower() for t in cfg.get("tipos_contrato", [])]
+    if tipos and licitacion.get("tipo", "").lower() not in tipos:
         return False
-    incluir = [p.lower() for p in cfg.get("incluir_palabras_clave", [])]
-    return any(patron in texto for patron in incluir)
+    texto = f"{licitacion['titulo']} {licitacion['resumen']}".lower()
+    if any(p.lower() in texto for p in cfg.get("excluir_palabras_clave", [])):
+        return False
+    return any(t.lower() in texto for t in cfg.get("terminos_carrera", []))
+
+
+NUMEROS_EN_LETRA = {
+    "un": 1, "una": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6,
+    "siete": 7, "ocho": 8, "nueve": 9, "diez": 10, "once": 11, "doce": 12, "quince": 15,
+    "veinte": 20, "treinta": 30, "cuarenta": 40, "sesenta": 60, "noventa": 90,
+}
+DISPARADOR_ENTREGA = re.compile(
+    r"plazo\s+(?:m[aá]ximo\s+|total\s+)?de\s+(?:entrega|ejecuci[oó]n|suministro)"
+    r"|(?:se\s+)?entregar[aá]n?\b|entrega\s+de\s+(?:los\s+)?(?:art[ií]culos|productos|bienes|suministros)",
+    re.I,
+)
+CANTIDAD_PLAZO = re.compile(
+    r"\b(\d{1,3}|" + "|".join(sorted(NUMEROS_EN_LETRA, key=len, reverse=True)) + r")\s*(?:\(\s*\d+\s*\)\s*)?"
+    r"(d[ií]as?|semanas?|mes(?:es)?|a[nñ]os?)(\s+h[aá]biles)?",
+    re.I,
+)
+PALABRAS_QUE_DESCARTAN = ("muestra", "prototipo", "garant", "pago", "factura", "recurso", "subsan", "oferta", "reclam")
+
+
+def plazos_de_entrega(texto: str) -> list[tuple[int, str]]:
+    """Plazos de entrega/ejecución (en días naturales) que menciona un pliego, con su frase."""
+    texto = re.sub(r"\s+", " ", texto)
+    encontrados = []
+    for disparo in DISPARADOR_ENTREGA.finditer(texto):
+        ventana = texto[disparo.start(): disparo.start() + 170]
+        m = CANTIDAD_PLAZO.search(ventana, disparo.end() - disparo.start())
+        if not m:
+            continue
+        antes = texto[max(0, disparo.start() - 80): disparo.start()].split(". ")[-1]
+        contexto = (antes + texto[disparo.start(): disparo.start() + m.end()]).lower()
+        if any(p in contexto for p in PALABRAS_QUE_DESCARTAN):
+            continue
+        cantidad = m.group(1).lower()
+        n = int(cantidad) if cantidad.isdigit() else NUMEROS_EN_LETRA[cantidad]
+        unidad = m.group(2).lower()
+        factor = 1 if unidad.startswith("d") else 7 if unidad.startswith("sem") else 30 if unidad.startswith("mes") else 365
+        dias = n * factor
+        if m.group(3):
+            dias = round(dias * 1.4)  # días hábiles -> naturales aproximados
+        encontrados.append((dias, texto[disparo.start(): disparo.start() + m.end()].strip()))
+    return encontrados
+
+
+def analizar_pliegos(docs: list, maximo_pdfs: int = 4) -> dict:
+    """Descarga los pliegos en PDF de una licitación y extrae el plazo de entrega más corto."""
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        return {"entrega_dias": None, "entrega_texto": "", "pliegos_leidos": 0}
+
+    def prioridad(doc) -> int:
+        nombre = doc[1].lower()
+        return 0 if any(k in nombre for k in ("pcap", "ppt", "pliego", "prescrip", "clausul", "cláusul", "cuadro")) else 1
+
+    plazos = []
+    leidos = 0
+    for url, nombre in sorted(docs, key=prioridad)[:maximo_pdfs]:
+        try:
+            resp = requests.get(url, timeout=40, headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+            if len(resp.content) > 25 * 1024 * 1024:
+                continue
+            lector = PdfReader(io.BytesIO(resp.content))
+            texto = "\n".join((p.extract_text() or "") for p in lector.pages[:80])
+        except Exception as exc:
+            log.warning("No se pudo leer el pliego %s: %s", nombre, exc)
+            continue
+        leidos += 1
+        plazos.extend(plazos_de_entrega(texto))
+
+    if not plazos:
+        return {"entrega_dias": None, "entrega_texto": "", "pliegos_leidos": leidos}
+    dias, frase = min(plazos, key=lambda x: x[0])
+    return {"entrega_dias": dias, "entrega_texto": frase[:200], "pliegos_leidos": leidos}
+
+
+def etiqueta_entrega(licitacion: dict) -> str:
+    dias = licitacion.get("entrega_dias")
+    if dias is None:
+        return "no detectado en el pliego (revisar a mano)"
+    return f"{dias} días"
 
 
 def cargar_vistos(ruta: Path) -> dict:
@@ -264,7 +361,8 @@ def etiqueta_plazo(licitacion: dict) -> str:
 
 
 def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: str, busqueda_ok: bool) -> None:
-    filas = sorted(historial, key=clave_orden_plazo)
+    filas = sorted((h for h in historial if not h.get("descartada")), key=clave_orden_plazo)
+    descartadas = sorted((h for h in historial if h.get("descartada")), key=clave_orden_plazo)
 
     def escapar(texto: str) -> str:
         return (
@@ -274,17 +372,27 @@ def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: 
             .replace('"', "&quot;")
         )
 
-    if filas:
-        tarjetas = "\n".join(
-            f"""
+    def tarjeta(f: dict, motivo: str = "") -> str:
+        return f"""
         <article class="tarjeta">
           <h2><a href="{escapar(f['link'])}" target="_blank" rel="noopener">{escapar(f['titulo'])}</a></h2>
-          <p class="meta">Plazo: {escapar(etiqueta_plazo(f))} · Órgano: {escapar(f.get('organo') or 'n/d')} · Detectada: {escapar(f.get('encontrado_en', '')[:10])}</p>
+          <p class="meta">Plazo oferta: {escapar(etiqueta_plazo(f))} · Entrega: {escapar(etiqueta_entrega(f))} · Órgano: {escapar(f.get('organo') or 'n/d')}</p>{motivo}
         </article>"""
-            for f in filas
-        )
+
+    if filas:
+        tarjetas = "\n".join(tarjeta(f) for f in filas)
     else:
-        tarjetas = '<p class="vacio">Todavía no se ha encontrado ninguna licitación que coincida. Esta página se actualiza automáticamente cada semana.</p>'
+        tarjetas = '<p class="vacio">Ahora mismo no hay ninguna licitación abierta de producción de material para carreras que cumpla los criterios. Esta página se actualiza automáticamente cada semana.</p>'
+
+    if descartadas:
+        tarjetas += (
+            f'\n<details><summary>Descartadas por plazo de entrega corto ({len(descartadas)})</summary>\n'
+            + "\n".join(
+                tarjeta(f, f'\n          <p class="meta">Pliego: «{escapar(f.get("entrega_texto", ""))}»</p>')
+                for f in descartadas
+            )
+            + "\n</details>"
+        )
 
     estado = (
         '<span class="ok">● Búsqueda realizada correctamente</span>'
@@ -312,15 +420,17 @@ def generar_html(historial: list[dict], ruta_salida: Path, ultima_comprobacion: 
   .tarjeta a:hover {{ text-decoration: underline; }}
   .meta {{ font-size: 0.82rem; color: #777; margin: 0; }}
   .vacio {{ color: #777; font-style: italic; }}
+  details {{ margin-top: 28px; }}
+  summary {{ cursor: pointer; color: #777; margin-bottom: 12px; }}
   footer {{ margin-top: 40px; font-size: 0.78rem; color: #999; }}
 </style>
 </head>
 <body>
-  <h1>Licitaciones deportivas — bolsas del corredor, carreras y eventos</h1>
+  <h1>Suministro de material para carreras y bolsas del corredor</h1>
   <p class="subtitulo">Vigilancia automática del buscador documental de la Plataforma de Contratación del Sector Público (PLACSP)</p>
   <p class="estado">{estado} · Última comprobación: {escapar(formatear_fecha(ultima_comprobacion))}</p>
   {tarjetas}
-  <footer>Se actualiza automáticamente cada lunes mediante GitHub Actions. {len(filas)} licitación(es) en el histórico (últimos 180 días).</footer>
+  <footer>Se actualiza automáticamente cada lunes mediante GitHub Actions. {len(filas)} licitación(es) abierta(s) de suministro de material para carreras. El plazo de entrega se lee de los pliegos en PDF y es orientativo: confírmalo siempre en el pliego.</footer>
 </body>
 </html>
 """
@@ -336,7 +446,7 @@ def enviar_email(cfg_email: dict, nuevas: list[dict]) -> None:
         return
 
     cuerpo = "\n\n".join(
-        f"{l['titulo']}\n{l['link']}\nPlazo: {etiqueta_plazo(l)}\nÓrgano: {l.get('organo') or 'n/d'}"
+        f"{l['titulo']}\n{l['link']}\nPlazo oferta: {etiqueta_plazo(l)}\nEntrega: {etiqueta_entrega(l)}\nÓrgano: {l.get('organo') or 'n/d'}"
         for l in nuevas
     )
     asunto = f"[Licitaciones deportivas] {len(nuevas)} nueva(s) coincidencia(s)"
@@ -366,7 +476,7 @@ def enviar_telegram(cfg_telegram: dict, nuevas: list[dict]) -> None:
     for l in nuevas:
         # Texto plano, sin parse_mode: los títulos de licitaciones traen paréntesis,
         # puntos y guiones que rompen el parseo de Markdown de Telegram.
-        texto = f"📋 {l['titulo']}\nPlazo: {etiqueta_plazo(l)}\n{l['link']}"
+        texto = f"📋 {l['titulo']}\nPlazo oferta: {etiqueta_plazo(l)}\nEntrega: {etiqueta_entrega(l)}\n{l['link']}"
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         try:
             resp = requests.post(
@@ -414,11 +524,26 @@ def main() -> int:
     log.info("Licitaciones únicas encontradas: %d", len(licitaciones))
 
     coincidencias = [l for l in licitaciones if coincide(l, cfg)]
-    nuevas = [l for l in coincidencias if l["id"] not in vistos]
-    log.info("Nuevas (no notificadas antes): %d", len(nuevas))
+    log.info("Suministros de material para carreras abiertos: %d", len(coincidencias))
+
+    minimo = int(cfg.get("plazo_entrega_minimo_dias", 90))
+    for l in coincidencias:
+        l.update(analizar_pliegos(l.get("docs", [])))
+        dias = l.get("entrega_dias")
+        l["descartada"] = dias is not None and dias < minimo
+        log.info(
+            "  %s -> entrega %s%s",
+            l["titulo"][:70],
+            etiqueta_entrega(l),
+            " (DESCARTADA, menos de %d días)" % minimo if l["descartada"] else "",
+        )
+
+    aptas = [l for l in coincidencias if not l["descartada"]]
+    nuevas = [l for l in aptas if l["id"] not in vistos]
+    log.info("Aptas: %d · descartadas por plazo corto: %d · nuevas: %d", len(aptas), len(coincidencias) - len(aptas), len(nuevas))
 
     for l in nuevas:
-        print(f"- {l['titulo']}\n  Plazo: {etiqueta_plazo(l)}\n  {l['link']}\n")
+        print(f"- {l['titulo']}\n  Plazo: {etiqueta_plazo(l)}\n  Entrega: {etiqueta_entrega(l)}\n  {l['link']}\n")
 
     if args.dry_run:
         log.info("Modo --dry-run: no se han enviado alertas ni guardado estado")
@@ -433,16 +558,22 @@ def main() -> int:
             enviar_telegram(cfg.get("telegram", {}), nuevas)
         except Exception as exc:
             log.error("Fallo enviando Telegram: %s", exc)
-
         for l in nuevas:
             vistos[l["id"]] = ahora
-            historial.append({**l, "encontrado_en": ahora})
         guardar_vistos(ruta_vistos, vistos)
-        guardar_historial(ruta_historial, historial)
     else:
         log.info("Nada nuevo que avisar.")
 
-    generar_html(historial, Path(args.panel), ahora, busqueda_ok=True)
+    # El panel es una foto de lo que está abierto ahora y cumple los criterios.
+    previas = {h.get("id"): h for h in historial}
+    foto = []
+    for l in coincidencias:
+        l.pop("docs", None)
+        l["encontrado_en"] = previas.get(l["id"], {}).get("encontrado_en", ahora)
+        foto.append(l)
+    guardar_historial(ruta_historial, foto)
+
+    generar_html(foto, Path(args.panel), ahora, busqueda_ok=True)
     return 0
 
 

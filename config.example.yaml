@@ -2,10 +2,13 @@
 # config.yaml NO debe subirse a GitHub con contraseñas reales dentro:
 # usad variables de entorno / GitHub Secrets (ver README.md).
 
-# Cada una de estas frases se busca tal cual (búsqueda exacta) en el buscador
-# documental de PLACSP, que indexa el texto completo de anuncios y pliegos —
-# no solo el título — así que encuentra muchas más licitaciones reales que
-# filtrar por CPV o por el feed de "novedades".
+# Solo interesa PRODUCCIÓN / SUMINISTRO de material para carreras y bolsas del
+# corredor, con margen de producción suficiente. El script funciona en tres pasos:
+#   1) buscar estas frases en el buscador documental de PLACSP (descubrimiento);
+#   2) quedarse solo con contratos del tipo indicado cuyo título/CPV contenga
+#      algún término de carrera y ninguna exclusión;
+#   3) leer los pliegos en PDF y descartar los que fijen un plazo de entrega
+#      menor que plazo_entrega_minimo_dias.
 incluir_palabras_clave:
   - "bolsa del corredor"
   - "bolsas del corredor"
@@ -13,39 +16,76 @@ incluir_palabras_clave:
   - "carreras populares"
   - "prueba deportiva"
   - "pruebas deportivas"
-  - "dorsales"
-  - "cronometraje"
-  - "avituallamiento"
-  - "trofeos deportivos"
-  - "medallas finisher"
-  - "material deportivo"
-  - "equipamiento deportivo"
-  - "eventos deportivos"
-  - "organización de eventos deportivos"
-  - "organización de la prueba"
   - "prueba atlética"
+  - "dorsales"
+  - "medallas finisher"
+  - "trofeos deportivos"
+  - "camisetas técnicas"
+  - "calcetines técnicos"
+  - "material deportivo"
+  - "eventos deportivos"
   - "maratón"
   - "media maratón"
   - "trail running"
   - "carrera solidaria"
   - "carrera nocturna"
+  - "cursa popular"
 
-# Si el título o la descripción contiene cualquiera de estas frases,
-# se descarta SIEMPRE, aunque también matchee una palabra clave de arriba.
+# Tipos de contrato que se avisan (campo "Tipo de Contrato" de la ficha).
+# "Suministros" = fabricar/comprar material; "Servicios" (organización,
+# cronometraje, ambulancias...) queda fuera.
+tipos_contrato:
+  - "Suministros"
+
+# Para avisar, el título (o los CPV) debe contener alguno de estos términos
+# relacionados con carreras o con el material típico de una carrera.
+terminos_carrera:
+  - "carrera"
+  - "corredor"
+  - "dorsal"
+  - "maratón"
+  - "maraton"
+  - "trail"
+  - "running"
+  - "finisher"
+  - "san silvestre"
+  - "atlétic"
+  - "atletic"
+  - "cursa popular"
+  - "medalla"
+  - "trofeo"
+  - "10k"
+  - "5k"
+
+# Si el título o los CPV contienen cualquiera de estas frases, se descarta SIEMPRE.
 excluir_palabras_clave:
   - "mantenimiento de instalaciones deportivas"
   - "limpieza de piscina"
   - "monitor de gimnasio"
   - "socorrista"
+  - "socorrismo"
   - "césped artificial"
   - "climatización pabellón"
-  - "vigilancia y socorrismo"
+  - "gimnasio"
+  - "fitness"
+  - "crossfit"
+  - "pabellón"
+  - "polideportivo"
+  - "sala de recuperación"
+  - "buques"
+  - "ambulancia"
   - "espectáculo taurino"
   - "espectaculos taurinos"
   - "corrida de toros"
   - "suelta de vaquillas"
   - "rejoneo"
   - "encierro"
+
+# Plazo de entrega mínimo (en días) que necesitáis para presentar muestras y
+# producir. Si el pliego fija un plazo menor, la licitación NO se avisa (queda
+# en el apartado "Descartadas" del panel). Si el plazo no se detecta en el
+# pliego, se avisa igualmente indicando "revisar a mano".
+plazo_entrega_minimo_dias: 90
 
 email:
   usuario: "tuempresa@gmail.com"
