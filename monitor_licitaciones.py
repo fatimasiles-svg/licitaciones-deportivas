@@ -271,6 +271,8 @@ def etiqueta_entrega(licitacion: dict) -> str:
     dias = licitacion.get("entrega_dias")
     if dias is None:
         return "no detectado en el pliego (revisar a mano)"
+    if licitacion.get("entrega_ajustada"):
+        return f"{dias} días ⚠ plazo ajustado: valorar si se puede gestionar"
     return f"{dias} días"
 
 
@@ -526,11 +528,13 @@ def main() -> int:
     coincidencias = [l for l in licitaciones if coincide(l, cfg)]
     log.info("Suministros de material para carreras abiertos: %d", len(coincidencias))
 
-    minimo = int(cfg.get("plazo_entrega_minimo_dias", 90))
+    minimo = int(cfg.get("plazo_entrega_minimo_dias", 30))
+    comodo = int(cfg.get("plazo_entrega_comodo_dias", 90))
     for l in coincidencias:
         l.update(analizar_pliegos(l.get("docs", [])))
         dias = l.get("entrega_dias")
         l["descartada"] = dias is not None and dias < minimo
+        l["entrega_ajustada"] = dias is not None and minimo <= dias < comodo
         log.info(
             "  %s -> entrega %s%s",
             l["titulo"][:70],

@@ -81,11 +81,14 @@ excluir_palabras_clave:
   - "rejoneo"
   - "encierro"
 
-# Plazo de entrega mínimo (en días) que necesitáis para presentar muestras y
-# producir. Si el pliego fija un plazo menor, la licitación NO se avisa (queda
-# en el apartado "Descartadas" del panel). Si el plazo no se detecta en el
-# pliego, se avisa igualmente indicando "revisar a mano".
-plazo_entrega_minimo_dias: 90
+# Plazo de entrega según el pliego (en días):
+#  - menor que plazo_entrega_minimo_dias  -> NO se avisa (queda en "Descartadas").
+#  - entre mínimo y plazo_entrega_comodo_dias -> se avisa marcado como "plazo
+#    ajustado" para que valoréis si se puede gestionar.
+#  - mayor o igual que comodo -> se avisa sin marca.
+# Si el plazo no se detecta en el pliego, se avisa indicando "revisar a mano".
+plazo_entrega_minimo_dias: 30
+plazo_entrega_comodo_dias: 90
 
 email:
   usuario: "tuempresa@gmail.com"
