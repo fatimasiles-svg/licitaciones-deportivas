@@ -11,20 +11,22 @@
     "entrega_texto": "plazo máximo de entrega será de 15 días",
     "pliegos_leidos": 1,
     "descartada": true,
+    "entrega_ajustada": false,
     "encontrado_en": "2026-10-13T16:17:05.917597+00:00"
   },
   {
-    "id": "doc:G1cCjKMEBE0%2B1TMyIiZmzw%3D%3D",
-    "titulo": "2026/50007C. Suministro de globos e hilo biodegradable y alquiler de bombonas de gas helio para su inflado con motivo de la celebración del evento \"Maratón de Cuentos\" de Benalmádena para la anualidad 2027",
-    "resumen": "24111300-Helio., 39298600-Globos., 39540000-Cordaje diverso, cuerda, bramante y redes.",
-    "link": "https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&idEvl=G1cCjKMEBE0%2B1TMyIiZmzw%3D%3D",
-    "organo": "Concejalía de Hacienda del Ayuntamiento de Benalmádena",
-    "plazo": "14/10/2026 23:59",
+    "id": "doc:Rehuceo2BihPpzdqOdhuWg%3D%3D",
+    "titulo": "C073/DEP/2026-021. Adquisición de 110 chándals para la Carrera III Media Maratón Nocturna",
+    "resumen": "37400000-Artículos y material deportivo.",
+    "link": "https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&idEvl=Rehuceo2BihPpzdqOdhuWg%3D%3D",
+    "organo": "Junta de Gobierno del Ayuntamiento de Móstoles",
+    "plazo": "18/10/2026 23:59",
     "tipo": "Suministros",
-    "entrega_dias": 3,
-    "entrega_texto": "plazo de entrega del material será 3 días",
-    "pliegos_leidos": 4,
+    "entrega_dias": 20,
+    "entrega_texto": "PLAZO DE EJECUCIÓN: el plazo de ejecución del contrato será de 20 días",
+    "pliegos_leidos": 1,
     "descartada": true,
-    "encontrado_en": "2026-10-05T07:18:44.885073+00:00"
+    "entrega_ajustada": false,
+    "encontrado_en": "2026-10-15T08:59:11.530422+00:00"
   }
 ]
