@@ -15,18 +15,33 @@
     "encontrado_en": "2026-10-13T16:17:05.917597+00:00"
   },
   {
-    "id": "doc:Rehuceo2BihPpzdqOdhuWg%3D%3D",
-    "titulo": "C073/DEP/2026-021. Adquisición de 110 chándals para la Carrera III Media Maratón Nocturna",
+    "id": "doc:T%2F%2FpmGdfOdWAAM7L03kM8A%3D%3D",
+    "titulo": "2026/EA15/00003026E. Suministro de un mapa de carreras de orientación para torneo",
     "resumen": "37400000-Artículos y material deportivo.",
-    "link": "https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&idEvl=Rehuceo2BihPpzdqOdhuWg%3D%3D",
-    "organo": "Junta de Gobierno del Ayuntamiento de Móstoles",
-    "plazo": "18/10/2026 23:59",
+    "link": "https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&idEvl=T%2F%2FpmGdfOdWAAM7L03kM8A%3D%3D",
+    "organo": "Jefatura de la Sección Económico Administrativa 15 Agrupación del Cuartel General del Ejército del Aire",
+    "plazo": "26/10/2026 23:59",
     "tipo": "Suministros",
-    "entrega_dias": 20,
-    "entrega_texto": "PLAZO DE EJECUCIÓN: el plazo de ejecución del contrato será de 20 días",
-    "pliegos_leidos": 1,
-    "descartada": true,
+    "entrega_dias": null,
+    "entrega_texto": "",
+    "pliegos_leidos": 0,
+    "descartada": false,
     "entrega_ajustada": false,
-    "encontrado_en": "2026-10-15T08:59:11.530422+00:00"
+    "encontrado_en": "2026-10-19T14:26:06.529329+00:00"
+  },
+  {
+    "id": "doc:MLbGG%2B2hU6QadbH3CysQuQ%3D%3D",
+    "titulo": "2026/AR42U/00003126E. Suministro material deportivo para eventos tipo Trail Running para alumnos de la ESCAÑO",
+    "resumen": "18412000-Ropa deportiva.",
+    "link": "https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&idEvl=MLbGG%2B2hU6QadbH3CysQuQ%3D%3D",
+    "organo": "Intendente de Ferrol",
+    "plazo": "27/10/2026 08:30",
+    "tipo": "Suministros",
+    "entrega_dias": null,
+    "entrega_texto": "",
+    "pliegos_leidos": 2,
+    "descartada": false,
+    "entrega_ajustada": false,
+    "encontrado_en": "2026-10-19T14:26:06.529329+00:00"
   }
 ]
