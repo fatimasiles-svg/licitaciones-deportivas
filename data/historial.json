@@ -1,20 +1,5 @@
 [
   {
-    "id": "doc:pI3jm6aV8VoeC9GJQOEBkQ%3D%3D",
-    "titulo": "2026/15916. Contrato menor de suministro de 1300 pares de calcetines deportivos técnicos para la prueba deportiva IX Media Maratón Ciudad de Roquetas de Mar y 8 Km de promoción a celebrar el próximo 22 de noviembre de 2026",
-    "resumen": "18317000-Calcetines.",
-    "link": "https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&idEvl=pI3jm6aV8VoeC9GJQOEBkQ%3D%3D",
-    "organo": "Alcaldía del Ayuntamiento de Roquetas de Mar",
-    "plazo": "05/11/2026 23:59",
-    "tipo": "Suministros",
-    "entrega_dias": null,
-    "entrega_texto": "",
-    "pliegos_leidos": 0,
-    "descartada": false,
-    "entrega_ajustada": false,
-    "encontrado_en": "2026-11-02T16:53:02.744725+00:00"
-  },
-  {
     "id": "doc:eS92XqYAVzy9Hd5zqvq9cg%3D%3D",
     "titulo": "40/2026. Suministro de trofeos, placas, medallas y otros artículos de distinción y reconocimiento",
     "resumen": "39298700-Trofeos., 18512200-Medallas., 18530000-Regalos y premios.",
@@ -22,56 +7,11 @@
     "organo": "Junta de Gobierno del Ayuntamiento de Chiclana de la Frontera",
     "plazo": "23/11/2026 13:30",
     "tipo": "Suministros",
-    "entrega_dias": 1,
-    "entrega_texto": "Plazo de entrega 1 día",
-    "pliegos_leidos": 1,
-    "descartada": true,
-    "entrega_ajustada": false,
-    "encontrado_en": "2026-10-26T13:59:51.667787+00:00"
-  },
-  {
-    "id": "doc:8U11b3Fz8xBSYrkJkLlFdw%3D%3D",
-    "titulo": "PCO001202600559segundalicitacionLote5. Suministro por lotes de material publicitario con destino a la sección de deportes de la Diputación de A Coruña segunda licitación Lote 5",
-    "resumen": "18512200-Medallas., 39298700-Trofeos.",
-    "link": "https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&idEvl=8U11b3Fz8xBSYrkJkLlFdw%3D%3D",
-    "organo": "Presidencia de la Diputación Provincial de A Coruña",
-    "plazo": "06/11/2026 23:59",
-    "tipo": "Suministros",
     "entrega_dias": null,
     "entrega_texto": "",
-    "pliegos_leidos": 1,
+    "pliegos_leidos": 0,
     "descartada": false,
     "entrega_ajustada": false,
     "encontrado_en": "2026-10-26T13:59:51.667787+00:00"
-  },
-  {
-    "id": "doc:%2FJvN%2BNzip3eP%2Bo96UAV7cQ%3D%3D",
-    "titulo": "PSU/2026/0000107742. Suministro de carpas, dorsales, cinta balizadora y pancarta en bovina",
-    "resumen": "37400000-Artículos y material deportivo., 34990000-Equipo de control, seguridad, señalización e iluminación., 39522100-Lonas, toldos y estores de exterior.",
-    "link": "https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&idEvl=%2FJvN%2BNzip3eP%2Bo96UAV7cQ%3D%3D",
-    "organo": "Consejería de Cultura, Turismo y Deportes",
-    "plazo": "04/11/2026 23:59",
-    "tipo": "Suministros",
-    "entrega_dias": 30,
-    "entrega_texto": "PLAZO DE EJECUCIÓN El plazo de ejecución del presente contrato será de 1 MES",
-    "pliegos_leidos": 1,
-    "descartada": false,
-    "entrega_ajustada": true,
-    "encontrado_en": "2026-10-26T13:59:51.667787+00:00"
-  },
-  {
-    "id": "doc:nX%2Fga5o8UcKS81gZFETWmA%3D%3D",
-    "titulo": "578/26. Suministros varios destinados a cubrir las necesidades operativas y formativas anuales de la Escuela de Tauromaquia del Patronato Provincial de la Diputación de Badajoz: carretones y pares de cuernos, capotes y muletas, espadas y estoques, banderillas, vestuario, carnets identificativos y trofeos",
-    "resumen": "39298700-Trofeos., 18412100-Prendas para el entrenamiento deportivo., 35123400-Distintivos de identificación., 35311100-Espadas., 37000000-Instrumentos musicales, artículos deportivos, juegos, juguetes, artículos de artesanía, materiales artísticos y accesorios.",
-    "link": "https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&idEvl=nX%2Fga5o8UcKS81gZFETWmA%3D%3D",
-    "organo": "Patronato Provincial de la Escuela de Tauromaquia",
-    "plazo": "17/11/2026 14:00",
-    "tipo": "Suministros",
-    "entrega_dias": 30,
-    "entrega_texto": "plazo de entrega de los equipos se realizará en el plazo de 30 días",
-    "pliegos_leidos": 3,
-    "descartada": false,
-    "entrega_ajustada": true,
-    "encontrado_en": "2026-11-02T16:53:02.744725+00:00"
   }
 ]
